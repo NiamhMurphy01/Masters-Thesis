@@ -1,0 +1,86 @@
+library(devtools)
+install_github("Sage-Bionetworks/CMSclassifier",force = TRUE)
+library(CMSclassifier)
+library(CMScaller)
+
+#Associated clinical information
+GSE <- read.csv("GSE103479_pheno.csv")
+head(GSE)
+dim(GSE)
+View(GSE)
+
+
+#Microarray data for the 156 patients in the Taxonomy cohort
+gene <- read.csv("affy_norm_genesymbol.csv", row.names = 1)
+head(gene)
+dim(gene)
+View(gene)
+
+#getting entrez ids
+library(org.Hs.eg.db)
+entrez <- mapIds(org.Hs.eg.db, genes, 'ENTREZID', 'SYMBOL')
+gene$entrez <- entrez
+entrezid <- read.csv("entrezid.csv")
+View(entrezid)
+write.csv(gene, "entrezid.csv")
+entrezid <- read.csv("entrezid.csv", row.names = 1)
+entrezid
+entrezid <- na.omit(entrezid)
+write.csv(entrezid, "entrezidna.csv")
+entrezidna <- read.csv("entrezidna.csv", row.names = 1)
+View(entrezidna)
+
+#CMS classifier 
+#Random forest CMS scores
+#min posterior probability 0.5
+RFcms1 <- classifyCMS.RF(entrezidna,center=TRUE,minPosterior=.5)
+View(RFcms1)
+write.csv(RFcms1, "RFcms1.csv")
+cmsvalues <- RFcms1$RF.nearestCMS
+table(RFcms1['RF.nearestCMS'])
+
+#min posterior probability 0.3
+#USE THIS
+#Go with these results as theyre closet to the original- original contains more NA values 
+RFcms2 <- classifyCMS.RF(entrezidna,center=TRUE,minPosterior=.3)
+View(RFcms2)
+write.csv(RFcms2, "RFcms2.csv")
+table(RFcms2['RF.nearestCMS'])
+
+#dont use this 
+#CMScaller
+res <- CMScaller(entrezidna, RNAseq = TRUE, doPlot = TRUE)
+View(res)
+write.csv(res,"cmscallerre")
+
+cam <- CMSgsa(entrezidna, class = res$prediction, RNAseq = TRUE)
+
+#MCP counter
+#microarray data u use the original data set without doing anything to it and then set the features type to hugo symbols]
+#this gives the same results as the original data 
+library(MCPcounter)
+mcp <- MCPcounter.estimate(gene, featuresType = "HUGO_symbols")
+write.csv(mcp,"mcpresults.csv")
+library(pheatmap)
+pheatmap(mcp, fontsize_col = 4, cellwidth = 3, cellheight = 12)
+
+#CRIS classifier
+load_all('/Users/niamhmurphy/Desktop/Colorectal_Cancer /CRISclassifier')
+library(CRISclassifier)
+
+demo1 <- list.files(pattern="txt$", system.file("data", package = "CRISclassifier"), full.names=TRUE)
+print(demo1)
+cris_classifier(input.exp.filename = demo1, output.name="test", nresmpl=1)
+#output files are saved to working directory 
+
+#finding out how cris subgroups are distributed amonst each cms cohort
+cmscris <- read.csv("cmscriscalls.csv")
+View(cmscris)
+library(ggplot2)
+ggplot(cmscris, aes(fill=CRIS, y=Count, x=CMS)) + 
+  geom_bar(position="stack", stat="identity") +
+  xlab('') +
+  ylab('Number of CRIS subtypes') +
+  labs(fill = 'CRIS') +
+  theme(text = element_text(size=15),
+        axis.text.x = element_text(angle=50, hjust=1))
