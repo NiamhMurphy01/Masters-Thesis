@@ -1,0 +1,326 @@
+#This R-script was submitted and run in HPC.
+#loading relevant libraries 
+library(reshape2)
+library(grDevices)
+library(pROC)
+library(limma)
+library(foreach)
+library(caret)
+library(themis)
+
+#ML model built on microarray data
+#Gene expression data for microarray
+microgenes <- read.csv("microgene.csv", row.names = 1)
+dim(microgenes)
+#creating event column
+Event <- c("Control", "Control", "Control", "Control", "Control", "Control", "Control", "Control", "Control", "Control", "Control", "Control","Control","Control","CRISCLowCD8","Control","Control","Control","Control","CRISCLowCD8","Control","Control","Control","Control","CRISCLowCD8","CRISCLowCD8","Control","CRISCLowCD8","CRISCLowCD8","Control","Control","Control","CRISCLowCD8","CRISCLowCD8","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","CRISCLowCD8","Control","Control","Control","Control","CRISCLowCD8","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","CRISCLowCD8","CRISCLowCD8","CRISCLowCD8","Control","CRISCLowCD8","Control","Control","Control","Control","Control","Control","Control","Control","CRISCLowCD8","Control","Control","Control","Control","Control","Control","Control","Control","Control","CRISCLowCD8","Control","Control","Control","Control","Control","Control","Control","Control","CRISCLowCD8","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","CRISCLowCD8","Control","Control","Control","Control","CRISCLowCD8","CRISCLowCD8","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","Control","CRISCLowCD8","Control","CRISCLowCD8","Control","Control", "CRISCLowCD8", "Control") # Add labels for each sample
+dim(Event)
+table(Event)
+#23 CRIS-C/low CD8 patients
+#133 controls 
+
+################FUNCTIONS##################################
+
+#Differentially expressed gene function to be implemented in model
+deg <- function(labelTrain, training, case, control, cont.matrix) {
+  Group <- factor(Event)
+  des_mod <- model.matrix(~0+Group)
+  colnames(des_mod) <- c("CRISCLowCD8", "Control")
+  cont.matrix <- makeContrasts(CRISCLowCD8-Control, levels = c("CRISCLowCD8", "Control"))
+  fit <- lmFit(microgenes, des_mod)
+  fit2 <- contrasts.fit(fit,cont.matrix)
+  fit2 <- eBayes(fit2)
+  result <- topTable(fit2,n=Inf)
+  return(rownames(result[result$P.Value<0.01,]))
+}
+deg()
+
+
+#Splitting data into testing and training sets. 
+train_index <- createDataPartition(eventmicro$A1BG, p = 0.8, list = FALSE)
+train_data <- eventmicro[train_index, ]
+test_data <- eventmicro[-train_index, ]
+
+
+#Adding the event column to our microarray gene expression data.
+tranposemicro <- t(microgenes)
+tranposemicro <- as.data.frame(tranposemicro)
+Event <- as.data.frame(Event)
+class(Event)
+#adding event column to gene expression
+eventmicro <- cbind(tranposemicro, Event)
+eventmicro$Event <- as.factor(eventmicro$Event)
+
+
+# Define the lassoGrid object
+lassoGrid <- expand.grid(alpha = 1, lambda = seq(0.001, 1, length = 100))
+
+#Training a single LASSO model
+#This function returns the probabily and prediciton of classification on testing data 
+#j value is the instance of lambda value used in the grid hyperparameter tuning
+
+modelTrain <- function(train, test, j) {
+  model <- train(train[1:ncol(train)-1],
+                 train$Event,
+                 # method relates to the type of ML method used e.g. LASSO, Random forest, SVM etc.
+                 method = "glmnet",
+                 # LASSO models need to be centred and scaled before training
+                 preProcess =  c("center", "scale"),
+                 tuneGrid = lassoGrid[j,],
+                 trControl = trainControl(verboseIter = TRUE,
+                                          classProbs = TRUE,
+                                          summaryFunction = multiClassSummary,
+                                          method = "none",
+                                          preProcOptions = NULL,
+                                          allowParallel = TRUE,
+                                          savePredictions = "all")
+                 )
+pred <- predict(model, test)
+  print(pred)
+  prob <- predict(model, test, type = "prob")
+  print(prob)
+  feat <- coef(model$finalModel, s = model$bestTune$lambda)
+  feat <- length(feat@Dimnames[[1]][feat@i+1])-1
+  return(c(test$Event, pred, prob[,1], prob[,2], feat))
+}
+
+j_value <- 1
+trainingCD8 <- modelTrain(train_data,test_data,j_value)
+#saving results
+saveRDS(trainingCD8, file = 'trainingCD8.rds')
+
+
+#modelFeat -Trains a single LASSO model and returns the relative feature importance (RFI) of each feature that the trained model has selected 
+
+modelFeat<- function(train, j) {
+  model <- train(train[1:ncol(train)-1],
+                 train$Event,
+                 method = 'glmnet',
+                 preProcess =  c('center', 'scale'),
+                 tuneGrid = lassoGrid[j,],
+                 trControl = trainControl(verboseIter = TRUE,
+                                          classProbs = TRUE,
+                                          summaryFunction = multiClassSummary,
+                                          method = "none",
+                                          preProcOptions = NULL,
+                                          allowParallel = TRUE,
+                                          savePredictions = 'all'))
+imp <- varImp(model)$importance
+  imp2 <- imp[order(imp$Overall, decreasing = T),]
+  imp3 <- rownames(imp)[order(imp$Overall, decreasing = T)]
+  imp3 <- imp3[imp2 != 0]
+  imp2 <- imp2[imp2 != 0]/100
+  return(data.frame(Feature = imp3, RFI = imp2))
+}
+
+modelFeatresult <- modelFeat(train_data, j_value)
+saveRDS(modelFeatresult, file = 'modelfeatresult.rds')
+
+#load the doParallel library for parallel computing 
+library(doParallel)
+# Create a parallel cluster with 16 processing cores
+cl <- makePSOCKcluster(16)
+# Register the parallel cluster for parallel processing
+registerDoParallel(cl)
+
+#########Threshold plot function ################
+#Calculates the performance metrics for each probability threshold and returns the results as a prob$
+threshold_plot <- function(trainResults, threshold, levels) {
+    trainPerf <- foreach(i = 1:length(threshold), .combine = 'rbind') %dopar% {
+    trainResults$pred <- factor(ifelse(trainResults[levels[1]] > threshold[i], levels[1], levels[2]),$
+    multiClassSummary(trainResults, lev = levels)
+  }
+
+  trainPerf <- as.data.frame(trainPerf)
+  trainPerf[is.na(trainPerf)] <- 0
+  trainPerf <- trainPerf[, c('Accuracy', 'Sensitivity', 'Specificity', 'F1')]
+  trainPerf$Threshold <- threshold
+  trainMetrics <- melt(trainPerf, id.vars = 'Threshold', variable.name = 'Metric', value.name = 'Data$
+
+  ggplot(trainMetrics, aes(x = Threshold, y = Data, color = Metric)) +
+    geom_line(size = 1) +
+    geom_vline(xintercept = 0.5, color = 'grey', size=1) +
+    ylab('') +
+    xlab('Probability Threshold') +
+    theme_light() 
++theme(text = element_text(size=20))
+}
+
+
+#### Differentially expressed genes ####
+# Identifies differentially expressed genes for each fold of LOOCV and saves each result within a list
+
+degList <- foreach(i = 1:nrow(eventmicro), .packages = c("limma")) %dopar% {
+   train <-eventmicro[-i, ]
+        cont.matrix <- makeContrasts(CRISCLowCD8 - Control, levels = c('CRISCLowCD8', 'Control'))
+      degs <- deg(train$Event,
+        train[1:ncol(train)-1],
+        case = "CRISCLowCD8",
+        control = "Control",
+        cont.matrix = cont.matrix)
+
+}
+
+saveRDS(degList, file = 'degList.rds')
+######################################################################
+
+
+######### Train ML models ##############
+# LASSO grid search hyperparameter tuning
+lassoGrid <- expand.grid(alpha = 1, lambda = seq(0.001, 1, length = 100))
+
+# Performs LOOCV and trains LASSO models with different parameters via grid search tuning using the differentially expressed genes previously identified
+trainingGE <- foreach(i = 1:nrow(eventmicro), .packages = c("caret")) %dopar% {
+  train <- eventmicro[-i, c(degList[[i]],'Event')]
+  test <- eventmicro[i, c(degList[[i]], 'Event')]
+  models <- data.frame(obs = NA, pred = NA, CRISCLowCD8 = NA, Control = NA, feat = NA)
+for (j in seq(nrow(lassoGrid))) {
+    models[j,] <- modelTrain(train, test,j)
+    rownames(models)[j] <- lassoGrid[j,]$lambda
+  }
+
+  return(models)
+}
+
+saveRDS(trainingGE, file = 'trainingGE1.rds')
+#################################################################
+
+# Creates a results data frame similar to that from caret trained classification model results
+my.train_CD8 <- foreach(i = 1:nrow(lassoGrid), .combine = 'rbind') %dopar% {
+  j <- do.call(rbind, (lapply(trainingGE, function(x) x[i,1:4])))
+
+  # Specify levels for observed and predicted data
+        levels_list <- c('CRISCLowCD8', 'Control')
+        j$obs <- factor(ifelse(j$obs == 1, 'CRISCLowCD8','Control'), levels = levels_list)
+        j$pred <- factor(ifelse(j$pred == 1, 'CRISCLowCD8', 'Control'), levels = levels_list)
+
+  multiClassSummary(j, lev = levels_list)
+}
+
+
+# Formats the results data frame in order of the best performing model following hyperparameter tuning
+rownames(my.train_CD8) <- lassoGrid$lambda
+my.train_CD8 <- as.data.frame(my.train_CD8)
+my.train_CD8[order(my.train_CD8$AUC, decreasing = T),]
+
+saveRDS(my.train_CD8, file = 'mytrainCD8.rds')
+#################################################################
+
+### ROC curve ####
+# Gets the CRIS-C/CD8-low probability score of each sample and each lambda value in LASSO
+prob_CD8 <- foreach(i = 1:nrow(lassoGrid)) %dopar% {
+  unlist(lapply(trainingGE, function(x) x[i,3]))
+}
+
+# Gets the CRIS-C/CD8-low probability score for each sample for the best performing model
+cd8Prob <- prob_CD8[[order(my.train_CD8$AUC, decreasing = T)[1]]]
+print(cd8Prob)
+
+cd8Roc <- pROC::roc(eventmicro$Event, cd8Prob, levels=c('CRISCLowCD8','Control'))
+pdf(file = 'roc.pdf')
+pROC::roc(eventmicro$Event, cd8Prob, levels=c('CRISCLowCD8','Control'))
+dev.off()
+
+#### Threshold performance plot ####
+cd8Results <- data.frame(obs = eventmicro$Event,
+pred = as.factor(ifelse(prob_CD8[[order(my.train_CD8$AUC, decreasing = T)[1]$
+                         CRISCLowCD8 = prob_CD8[[order(my.train_CD8$AUC, decreasing = T)[1]]],
+                         Control = 1 - prob_CD8[[order(my.train_CD8$AUC, decreasing = T)[1]]]
+)
+print(cd8Results)
+levels(cd8Results$obs)
+levels(cd8Results$pred)
+
+cd8Levels <- c('CRISCLowCD8', 'Control')
+print(cd8Levels)
+
+cd8Results$obs <- factor(cd8Results$obs, levels = cd8Levels)
+cd8Results$pred <- factor(cd8Results$pred, levels = cd8Levels)
+
+cd8Threshold <- cd8Roc$thresholds
+cd8Threshold[c(1,141)] <- c(0,1)
+print(cd8Threshold)
+
+pdf(file = 'threshold.pdf')
+threshold_plot(cd8Results, cd8Threshold, cd8Levels)
+dev.off()
+
+# Gets number of features used in the best performing model
+featCD8 <- foreach(i = 1:nrow(lassoGrid)) %dopar% {
+  unlist(lapply(trainingGE, function(x) x[i,5]))
+}
+
+summary(featCD8[[order(my.train_CD8$AUC, decreasing = T)[1]]])
+
+###########################################################
+
+# Gets the relative feature importance (RFI) of the features used in the best performing model
+featuresCD8 <- foreach(i = 1:nrow(eventmicro)) %dopar% {
+  train <- eventmicro[-i, c(degList[[i]],'Event')]
+  return(modelFeat(train, order(my.train_CD8$AUC, decreasing = T)[1]))
+}
+
+# Returns the feature names for the median number of features that were selected in the best performi$
+featuresDF <- bind_rows(featuresCD8)
+featuresFreq <- as.data.frame(table(featuresDF$Feature))
+featuresFreq <- featuresFreq[order(featuresFreq$Freq, decreasing = T),]
+featuresFreq <- featuresFreq[1:summary(featCD8[[order(my.train_CD8$AUC, decreasing = T)[1]]])[3],]
+
+# Calculates the mean RFI for the median number of features that were selected in the best performing$
+featuresRFI <- aggregate(featuresDF$RFI, by = list(featuresDF$Feature), FUN = mean)
+featuresRFI <- featuresRFI[featuresRFI$Group.1 %in% featuresFreq$Var1,]
+
+# Data frame formatting for the RFI plot
+featuresFreq <- featuresFreq[order(featuresFreq$Var1),]
+featuresRFI <- featuresRFI[order(featuresRFI$Group.1),]
+featuresRFI$Group.1 <- paste0(featuresRFI$Group.1, '(', featuresFreq$Freq,')')
+colnames(featuresRFI) <- c('Feature', 'RFI')
+print(featuresRFI)
+
+#####################################################################
+
+#### Caret NM development example ####
+# Set seeds for LOOCV in caret R package
+seeds = list()
+seeds$lasso <- vector(mode ='list', length = dim(eventmicro)[1] + 1)
+
+set.seed(5784)
+for(i in 1:(length(seeds$lasso)-1)) seeds$lasso[[i]]<- sample.int(n=10000, 100)
+
+set.seed(5784)
+seeds$lasso[[length(seeds$lasso)]] <- sample.int(n=10000, 1)
+
+# trainControl sets the settings used for training a ML
+train_ctrl = trainControl(classProbs = TRUE,
+                          summaryFunction = multiClassSummary,
+                          #method is the type of sampling/cross validation technique such as LOOCV
+                          method = 'LOOCV',
+                          seeds = seeds$lasso,
+                          preProcOptions = NULL,
+                          allowParallel = TRUE,
+                          savePredictions = 'all')
+
+saveRDS(train_ctrl, file = 'train_ctrl.rds')
+
+
+# Set seed and train LASSO models with LOOCV, SMOTE and grid search hyperparameter tuning
+set.seed(5784)
+my.train_lasso <- train(eventmicro[1:ncol(eventmicro)-1],
+        eventmicro$Event,
+        method = 'glmnet',
+        metric = 'AUC',
+        preProcess = c('center','scale'),
+        tuneGrid = lassoGrid,
+        trControl = train_ctrl)
+
+print(my.train_lasso)
+
+
+
+
+
+
+
+
+
+
