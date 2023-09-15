@@ -1,0 +1,463 @@
+#Kaplan Meier analysis Microarray data
+#Microarray clinical info 
+clinicalinfo <- read.csv("microarrayclinical.csv")
+dim(clinicalinfo)
+head(clinicalinfo)
+
+#I will first look at CMS2 patients in stage II and III CRC
+#Subsetting for CMS2 patients
+CMS2patients <- subset(clinicalinfo, Final_CMS == "CMS2")
+dim(CMS2patients)
+
+
+#Dataset currently states alive or dead, for surival analysis I will change this to 0 for dead and 1 for alive.
+survivalnumeric <- function(survnum) {
+  survivalvalues <- c("Alive" = 0, "Dead" = 1)
+  return(survivalvalues[survnum])
+}
+
+CMS2patients$Alive_dead <- sapply(CMS2patients$Alive_dead, survivalnumeric)
+
+#Kaplan Meier surival analysis
+#Stages in the cms2patients dataframe was written as II, IIA, III, IIIB and so on. Therefore I split them into their stage 2 or stage 3 groups to make the next steps of analysis easier.
+roman_to_numeric <- function(roman_numeral) {
+  roman_values <- c("II" = 2, "II " = 2, "IIA" = 2, "IIA " = 2, "IIB" = 2, "IIB " = 2, "IIC" = 2,"IIC " = 2, "III"=3,"III "=3, "IIIA"=3,"IIIA "=3, "IIIB"=3,"IIIB "=3,"IIIC"=3,"IIIC "=3) # Add more values as needed
+  return(roman_values[roman_numeral])
+}
+CMS2patients$Stage <- sapply(CMS2patients$Stage, roman_to_numeric)
+head(CMS2patients)
+
+library(survival)
+
+#Stage II CMS2 patients
+stageII <- subset(CMS2patients, Stage == "2")
+dim(stageII)
+
+#Stage II CMS2 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = CMS2patients)
+
+
+#Creating a plot to better visualise results
+library(ggsurvfit)
+survfit2(Surv(OverallSurvival,Alive_dead) ~ AdjCTX, data = CMS2patients)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)",
+  )+ 
+  add_risktable()
+
+#Stage III CMS2 patients
+stageIII <- subset(CMS2patients, Stage == "3")
+dim(stageIII)
+#Stage III CMS2 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OS_5years,Alive_dead_5yr)~AdjCTX, data = stageIII)
+
+library(ggsurvfit)
+survfit2(Surv(OS_5years,Alive_dead_5yr) ~ AdjCTX, data = stageIII)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+###########The same steps are repeated for each platform###################
+###########################################################################
+#RNA-Seq Survival analysis 
+novaclinical <- read.csv("novaseqclinical.csv")
+dim(novaclinical)
+head(novaclinical)
+
+CMS2nova <- subset(novaclinical, Final_CMS == "CMS2")
+dim(CMS2nova)
+
+#Dataset currently states alive or dead, for surival analysis I will change this to 0 for dead and 1 for alive.
+survivalnumeric <- function(survnum) {
+  survivalvalues <- c("Alive" = 0, "Dead" = 1)
+  return(survivalvalues[survnum])
+}
+
+CMS2nova$Alive_dead <- sapply(CMS2nova$Alive_dead, survivalnumeric)
+
+#Kaplan Meier surival analysis
+#Stages in the cms2patients dataframe was written as II, IIA, III, IIIB and so on. Therefore I split them into their stage 2 or stage 3 groups to make the next steps of analysis easier.
+roman_to_numeric <- function(roman_numeral) {
+  roman_values <- c("II" = 2, "II " = 2, "IIA" = 2, "IIA " = 2, "IIB" = 2, "IIB " = 2, "IIC" = 2,"IIC " = 2, "III"=3,"III "=3, "IIIA"=3,"IIIA "=3, "IIIB"=3,"IIIB "=3,"IIIC"=3,"IIIC "=3) # Add more values as needed
+  return(roman_values[roman_numeral])
+}
+CMS2nova$Stage <- sapply(CMS2nova$Stage, roman_to_numeric)
+head(CMS2nova)
+
+library(survival)
+
+#Stage II CMS2 patients
+stageIInova <- subset(CMS2nova, Stage == "2")
+dim(stageIInova)
+
+#Stage II CMS2 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = CMS2nova)
+#Creating a plot to better visualise results
+library(ggsurvfit)
+survfit2(Surv(OverallSurvival,Alive_dead) ~ AdjCTX, data = CMS2nova)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+#Stage III CMS2 patients
+stageIIInova <- subset(CMS2nova, Stage == "3")
+dim(stageIIInova)
+
+#Stage III CMS2 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+
+survdiff(Surv(OS_5years,Alive_dead_5yr)~AdjCTX, data = stageIIInova)
+
+library(ggsurvfit)
+survfit2(Surv(OS_5years,Alive_dead_5yr) ~ AdjCTX, data = stageIIInova)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+
+###############################################################################
+#Quant seq 
+quantclinical <- read.csv("quantseqclinical.csv")
+dim(quantclinical)
+
+CMS2quant <- subset(quantclinical, Final_CMS == "CMS2")
+dim(CMS2quant)
+
+#Dataset currently states alive or dead, for surival analysis I will change this to 0 for dead and 1 for alive.
+survivalnumeric <- function(survnum) {
+  survivalvalues <- c("Alive" = 0, "Dead" = 1)
+  return(survivalvalues[survnum])
+}
+
+CMS2quant$Alive_dead <- sapply(CMS2quant$Alive_dead, survivalnumeric)
+
+#Kaplan Meier surival analysis
+#Stages in the cms2patients dataframe was written as II, IIA, III, IIIB and so on. Therefore I split them into their stage 2 or stage 3 groups to make the next steps of analysis easier.
+roman_to_numeric <- function(roman_numeral) {
+  roman_values <- c("II" = 2, "II " = 2, "IIA" = 2, "IIA " = 2, "IIB" = 2, "IIB " = 2, "IIC" = 2,"IIC " = 2, "III"=3,"III "=3, "IIIA"=3,"IIIA "=3, "IIIB"=3,"IIIB "=3,"IIIC"=3,"IIIC "=3) # Add more values as needed
+  return(roman_values[roman_numeral])
+}
+CMS2quant$Stage <- sapply(CMS2quant$Stage, roman_to_numeric)
+head(CMS2quant)
+
+library(survival)
+
+#Stage II CMS2 patients
+stageIIquant <- subset(CMS2quant, Stage == "2")
+dim(stageIIquant)
+
+#Stage II CMS2 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = CMS2quant)
+
+#Creating a plot to better visualise results
+survfit2(Surv(OverallSurvival,Alive_dead) ~ AdjCTX, data = CMS2quant)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+
+#Stage III CMS2 patients
+stageIIIquant <- subset(CMS2quant, Stage == "3")
+dim(stageIIIquant)
+
+#Stage III CMS2 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+
+survdiff(Surv(OS_5years,Alive_dead_5yr)~AdjCTX, data = stageIIIquant)
+
+#plot
+survfit2(Surv(OS_5years,Alive_dead_5yr) ~ AdjCTX, data = stageIIIquant)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+
+######################################################################################3
+#Tempo seq
+tempoclinical <- read.csv("temposeqclinical.csv")
+dim(tempoclinical)
+
+CMS2tempo <- subset(tempoclinical, Final_CMS == "CMS2")
+dim(CMS2tempo)
+head(CMS2tempo)
+
+#Dataset currently states alive or dead, for surival analysis I will change this to 0 for dead and 1 for alive.
+survivalnumeric <- function(survnum) {
+  survivalvalues <- c("Alive" = 0, "Dead" = 1)
+  return(survivalvalues[survnum])
+}
+
+CMS2tempo$Alive_dead <- sapply(CMS2tempo$Alive_dead, survivalnumeric)
+
+#Kaplan Meier surival analysis
+#Stages in the cms2patients dataframe was written as II, IIA, III, IIIB and so on. Therefore I split them into their stage 2 or stage 3 groups to make the next steps of analysis easier.
+roman_to_numeric <- function(roman_numeral) {
+  roman_values <- c("II" = 2, "II " = 2, "IIA" = 2, "IIA " = 2, "IIB" = 2, "IIB " = 2, "IIC" = 2,"IIC " = 2, "III"=3,"III "=3, "IIIA"=3,"IIIA "=3, "IIIB"=3,"IIIB "=3,"IIIC"=3,"IIIC "=3) # Add more values as needed
+  return(roman_values[roman_numeral])
+}
+CMS2tempo$Stage <- sapply(CMS2tempo$Stage, roman_to_numeric)
+head(CMS2tempo)
+
+#Stage II CMS2 patients
+stageIItempo <- subset(CMS2tempo, Stage == "2")
+dim(stageIItempo)
+
+#Stage II CMS2 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = CMS2tempo)
+
+#Creating a plot to better visualise results
+survfit2(Surv(OverallSurvival,Alive_dead) ~ AdjCTX, data = CMS2tempo)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+
+#Stage III CMS2 patients
+stageIIItempo <- subset(CMS2tempo, Stage == "3")
+dim(stageIIItempo)
+
+#Stage III CMS2 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OS_5years,Alive_dead_5yr)~AdjCTX, data = stageIIItempo)
+
+
+survfit2(Surv(OS_5years,Alive_dead_5yr) ~ AdjCTX, data = stageIIItempo)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+#########CMS2 and CMS3 patients combined#####################################
+####################################################################################
+#Microarray CMS2 and CMS3 patients
+#Kaplan Meier analysis Microarray data
+#microarray clinical info 
+clinicalinfo <- read.csv("microarrayclinical.csv")
+dim(clinicalinfo)
+head(clinicalinfo)
+
+CMS2and3patients<-subset(clinicalinfo, clinicalinfo$Final_CMS %in% c("CMS2","CMS3"))
+dim(CMS2and3patients)
+
+CMS2and3patients$Alive_dead <- sapply(CMS2and3patients$Alive_dead, survivalnumeric)
+CMS2and3patients$Stage <- sapply(CMS2and3patients$Stage, roman_to_numeric)
+
+head(CMS2and3patients)
+
+
+
+#Stage II CMS2 & CMS3 patients
+stageII23 <- subset(CMS2and3patients, Stage == "2")
+dim(stageII23)
+
+#Stage II CMS2 & CMS3 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = stageII23)
+
+#Creating a plot to better visualise results
+survfit2(Surv(OverallSurvival,Alive_dead) ~ AdjCTX, data = stageII23)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)",
+  )+ 
+  add_risktable()
+
+
+
+#Stage III CMS2 & CMS3 patients
+stageIII23 <- subset(CMS2and3patients, Stage == "3")
+dim(stageIII23)
+
+
+#Stage III CMS2 & CMS3 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = stageIII23)
+
+survfit2(Surv(OverallSurvival,Alive_dead) ~ AdjCTX, data = stageIII23)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+
+###################################################################################
+#RNA-SEQ CMS2 & CMS3
+novaclinical <- read.csv("novaseqclinical.csv")
+dim(novaclinical)
+head(novaclinical)
+
+CMS2and3nova <- subset(novaclinical, novaclinical$Final_CMS %in% c("CMS2","CMS3"))
+dim(CMS2and3nova)
+
+CMS2and3nova$Alive_dead <- sapply(CMS2and3nova$Alive_dead, survivalnumeric)
+CMS2and3nova$Stage <- sapply(CMS2and3nova$Stage, roman_to_numeric)
+head(CMS2and3nova)
+
+#Stage II CMS2 & CMS3 patients
+stageII23nova <- subset(CMS2and3nova, Stage == "2")
+dim(stageII23nova)
+
+#Stage II CMS2 & CMS3 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = stageII23nova)
+
+#PLOT
+survfit2(Surv(OverallSurvival,Alive_dead) ~ AdjCTX, data = stageII23nova)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+#Stage III CMS2 & CMS3 patients
+stageIII23nova <- subset(CMS2and3nova, Stage == "3")
+dim(stageIII23nova)
+
+#Stage III CMS2 & CMS3patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = stageIII23nova)
+
+survfit2(Surv(OverallSurvival,Alive_dead) ~ AdjCTX, data = stageIII23nova)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+
+###############################################################################
+#Quant seq 
+quantclinical <- read.csv("quantseqclinical.csv")
+dim(quantclinical)
+
+CMS2and3quant <- subset(quantclinical,quantclinical$Final_CMS %in% c("CMS2","CMS3"))
+dim(CMS2and3quant)
+head(CMS2and3quant)
+
+CMS2and3quant$Alive_dead <- sapply(CMS2and3quant$Alive_dead, survivalnumeric)
+CMS2and3quant$Stage <- sapply(CMS2and3quant$Stage, roman_to_numeric)
+head(CMS2and3quant)
+
+#Stage II CMS2 & CMS3 patients
+stageII23quant <- subset(CMS2and3quant, Stage == "2")
+dim(stageII23quant)
+
+#Stage II CMS2 & CMS3 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = stageII23quant)
+
+#Creating a plot to better visualise results
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = stageIIcrisquant)
+
+library(ggsurvfit)
+survfit2(Surv(OverallSurvival,Alive_dead) ~ AdjCTX, data = stageII23quant)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+
+#Stage III CMS2 & CMS3 patients
+stageIII23quant <- subset(CMS2and3quant, Stage == "3")
+dim(stageIII23quant)
+
+
+#Stage III CMS2 & CMS3 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+#stats
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = stageIII23quant)
+
+
+survfit2(Surv(OverallSurvival,Alive_dead) ~ AdjCTX, data = stageIII23quant)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+######################################################################################3
+#Tempo seq
+tempoclinical <- read.csv("temposeqclinical.csv")
+dim(tempoclinical)
+
+CMS2and3tempo <- subset(tempoclinical,tempoclinical$Final_CMS %in% c("CMS2","CMS3") )
+dim(CMS2and3tempo)
+head(CMS2and3tempo)
+
+CMS2and3tempo$Alive_dead <- sapply(CMS2and3tempo$Alive_dead, survivalnumeric)
+
+CMS2and3tempo$Stage <- sapply(CMS2and3tempo$Stage, roman_to_numeric)
+head(CMS2tempo)
+
+
+#Stage II CMS2 & CMS3 patients
+stageII23tempo <- subset(CMS2and3tempo, Stage == "2")
+dim(stageII23tempo)
+
+
+
+#Stage II CMS2 & CMS3 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = stageII23tempo)
+
+#Creating a plot to better visualise results
+survfit2(Surv(OverallSurvival,Alive_dead) ~ AdjCTX, data = stageII23tempo)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
+
+
+#Stage III CMS2 & CMS3patients
+stageIII23tempo <- subset(CMS2and3tempo, Stage == "3")
+dim(stageIIItempo)
+
+
+#Stage III CMS2 & CMS3 patient surivival based on who received adjuvant fluororacil treatment or not 
+#seeing if treatment has an effect on patient survival 
+survdiff(Surv(OverallSurvival,Alive_dead)~AdjCTX, data = stageIII23tempo)
+
+survfit2(Surv(OverallSurvival,Alive_dead) ~ AdjCTX, data = stageIII23tempo)%>% 
+  ggsurvfit() +
+  labs(
+    x = "Time (months)",
+    y = "OS (probability)"
+  )+ 
+  add_risktable()
